@@ -2,63 +2,62 @@ services:
   app:  
     container_name: url-shortener-app
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: .
+      dockerfile: ./docker/Dockerfile
 
     ports:
       - "6000:9000"
 
     depends_on:
-      sqlserver:
+      postgres:
         condition: service_started
       redis:
         condition: service_started
     
     env_file:
-      - ../.env
+      - .env
     networks:
       - url_shortener
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   nginx:
     image: nginx:alpine
-    container_name: url-shortener-nginx
+    container_name: nginx-url-shortener
     ports:
       - "8085:80"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
     depends_on:
       - app
     networks:
       - url_shortener
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3 
 
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: sqlserver-url-shortener
-    environment:
-      ACCEPT_EULA: "Y"
-      SA_PASSWORD: ${SA_PASSWORD}
-    env_file:
-      - ../.env 
-    ports:
-      - "1433:1433"
-    volumes:
-      - sqlserver_data:/var/opt/mssql
+  postgres:
+    image: postgres:16
+    container_name: postgres-url-shortener
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo 'SELECT 1' | /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P $SA_PASSWORD"]
-  
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   redis:
     image: redis:alpine
     container_name: redis-url-shortener
@@ -76,5 +75,5 @@ networks:
     driver: bridge
 
 volumes:
-  sqlserver_data:
+  postgres_data:
   redis_data:
