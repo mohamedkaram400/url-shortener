@@ -6,7 +6,7 @@ services:
       dockerfile: ./docker/Dockerfile
 
     ports:
-      - "6000:9000"
+      - "9000:9000"
 
     depends_on:
       postgres:
@@ -20,7 +20,7 @@ services:
       - url_shortener
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -38,7 +38,7 @@ services:
       - url_shortener
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8085/ping"]
       interval: 30s
       timeout: 10s
       retries: 3 
@@ -57,6 +57,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - url_shortener
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5432/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3 
 
   redis:
     image: redis:alpine
@@ -77,3 +84,5 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+
+  
