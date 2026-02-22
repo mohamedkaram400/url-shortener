@@ -38,7 +38,7 @@ services:
       - url_shortener
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/ping"]
       interval: 30s
       timeout: 10s
       retries: 3 
@@ -60,7 +60,7 @@ services:
     networks:
       - url_shortener
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5432/ping"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 30s
       timeout: 10s
       retries: 3 
