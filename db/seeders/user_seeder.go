@@ -12,10 +12,11 @@ import (
 func SeedAdminUser(db *gorm.DB) {
 	// check if admin already exists
 	var admin entities.User
-	result := db.Where("role = ?", "Admin").Take(&admin)
+	result := db.Where("username = ?", "Admin").Take(&admin)
 
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		hashedPassword, _ := pkg.HashPassword("Admin@123")
+		log.Println("Creating Admin...")
+		hashedPassword := pkg.HashPassword("Admin@123")
 
 		admin = entities.User{
 			UserName:   "Admin",
@@ -31,11 +32,9 @@ func SeedAdminUser(db *gorm.DB) {
 
 		log.Println("✅ Admin user seeded successfully")
 		return
+	} else if result.Error != nil {
+    	log.Fatalf("❌ Failed to check admin user: %v", result.Error)
+	} else {
+		log.Println("⚠️ Admin user already exists, skipping seeding")
 	}
-
-	if result.Error != nil {
-		log.Fatalf("❌ Failed to check admin user: %v", result.Error)
-	}
-
-	log.Println("⚠️ Admin user already exists, skipping seeding")
 }

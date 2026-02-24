@@ -20,6 +20,7 @@ RUN apk add --no-cache curl
 WORKDIR /app
 
 COPY --from=builder /build/main .
+COPY --from=builder /build/db ./db 
 
 EXPOSE 9000
 
