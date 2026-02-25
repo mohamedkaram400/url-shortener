@@ -22,15 +22,22 @@ func NewAuthService(authRepo ports.UserAuthRepository) *AuthService {
 
 func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest) (*entities.User, string, string, error) {
 
+	var fieldErrors []*coreErrors.FieldError
+
 	emailExists, usernameExists, err := s.Repo.CheckEmailOrUsernameExists(ctx, req.Email, req.UserName)
 	if err != nil {
 		return nil, "", "", err
 	}
+
 	if emailExists {
-		return nil, "", "", coreErrors.ErrEmailAlreadyExists
+		fieldErrors = append(fieldErrors, coreErrors.NewFieldError("email", "email already exists"))
 	}
 	if usernameExists {
-		return nil, "", "", coreErrors.ErrUserNameAlreadyExists
+		fieldErrors = append(fieldErrors, coreErrors.NewFieldError("username", "username already exists"))
+	}
+
+	if len(fieldErrors) > 0 {
+		return nil, "", "", &coreErrors.MultiFieldError{Errors: fieldErrors}
 	}
 
 	hashedPassword := pkg.HashPassword(req.Password)
@@ -59,7 +66,7 @@ func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip strin
 	}
 
 	// check password
-	if err := pkg.CheckPassword(req.Password, req.Password); err != nil {
+	if err := pkg.CheckPassword(user.Password, req.Password); err != nil {
 		return nil, "", "", coreErrors.ErrInvalidCredentials
 	}
 
