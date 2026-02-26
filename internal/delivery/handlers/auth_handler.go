@@ -104,9 +104,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return 	
 	}
 
-	c.JSON(http.StatusOK, responses.AuthResponse{
-		Message: message,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": message})
 }
 
 // =========================

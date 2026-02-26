@@ -18,23 +18,24 @@ type FieldError struct {
 	Message string
 }
 
-func NewFieldError(field, message string) *FieldError {
-	return &FieldError{
-		Field:   field,
-		Message: message,
-	}
+type MultiFieldError struct {
+	Errors []*FieldError
 }
+
 
 func (e *FieldError) Error() string {
 	return e.Message
 }
 
-type MultiFieldError struct {
-	Errors []*FieldError
-}
-
 func (e *MultiFieldError) Error() string {
 	return "multiple validation errors"
+}
+
+func NewFieldError(field, message string) *FieldError {
+	return &FieldError{
+		Field:   field,
+		Message: message,
+	}
 }
 
 func ValidationError(err error) map[string]string {

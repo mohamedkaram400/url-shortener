@@ -10,7 +10,7 @@ services:
 
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_started
     
@@ -74,6 +74,7 @@ services:
       - redis_data:/data
     networks:
       - url_shortener
+    # command: redis-server --requirepass ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
 

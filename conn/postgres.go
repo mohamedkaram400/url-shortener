@@ -3,6 +3,7 @@ package conn
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
@@ -11,27 +12,28 @@ import (
 )
 
 func ConnectPostgres(dbURL string) (*gorm.DB, *sql.DB) {
+	var db *gorm.DB
+	var err error
 
-    // Open a connection to the database
-	db, err := gorm.Open(postgres.Open(dbURL), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		log.Fatal("❌ Failed to connect database:", err)
+	for i := 0; i < 10; i++ {
+		// Open a connection to the database
+		db, err = gorm.Open(postgres.Open(dbURL), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
+
+		// Verify the connection is established and valid by pinging the database
+		if err == nil {
+			sqlDB, _ := db.DB()
+			if err = sqlDB.Ping(); err == nil {
+				log.Println("✅ Successfully connected to PostgreSQL!")
+				return db, sqlDB
+			}
+		}
+
+		log.Println("⏳ Waiting for database...")
+		time.Sleep(2 * time.Second)
 	}
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Fatal("❌ Failed to get underlying sql.DB:", err)
-	}
-
-	// Verify the connection is established and valid by pinging the database
-	err = sqlDB.Ping()
-    if err != nil {
-        log.Fatal("❌ Error connecting to the database:", err)
-    }
-
-	log.Println("✅ Successfully connected to PostgreSQL!")
-
-	return db, sqlDB
+	log.Fatal("❌ Failed to connect to database after retries:", err)
+	return nil, nil
 }

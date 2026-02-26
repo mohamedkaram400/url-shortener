@@ -16,7 +16,10 @@ func SeedAdminUser(db *gorm.DB) {
 
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		log.Println("Creating Admin...")
-		hashedPassword := pkg.HashPassword("Admin@123")
+		hashedPassword, err := pkg.HashPassword("Admin@123")
+		if err != nil {
+			log.Fatalf("❌ Error generating hashed password: %v", err)
+		}
 
 		admin = entities.User{
 			UserName:   "Admin",

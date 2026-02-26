@@ -1,7 +1,17 @@
 package entities
 
-import "time"
+import (
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+)
+
+
+type CustomClaims struct {
+	UserID    uint      `json:"sub"`
+	TokenType string    `json:"token_type"`
+	jwt.RegisteredClaims
+}
 
 type Session struct {
 	ID           uint       `json:"id" gorm:"primaryKey"`
