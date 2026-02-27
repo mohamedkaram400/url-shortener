@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
-	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
 )
 
 
@@ -15,6 +17,28 @@ const (
 	AccessToken  TokenType = "access"
 	RefreshToken TokenType = "refresh"
 )
+
+func ValidateJWT(secretKey string, tokenString string) (*entities.CustomClaims, error) {
+	claims := &entities.CustomClaims{}
+
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		claims,
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("unexpected signing method")
+			}
+			return []byte(secretKey), nil
+		},
+	)
+
+	if err != nil || !token.Valid {
+		fmt.Println("JWT parse error:", err)
+		return nil, err
+	}
+
+	return claims, nil
+}
 
 func IsuueTokens(secretKey string, AccessTokenTime int, RefrashTokenTime int, userID uint) (string, string, error) {
 	accessToken, err := GenerateAccessToken(secretKey, AccessTokenTime, userID)
@@ -41,7 +65,7 @@ func GenerateToken(secretKey string, duration time.Duration, userID uint, tokenT
 	jwtSecret := []byte(secretKey)
 	
 	claims := entities.CustomClaims{
-		UserID:    uint(userID),
+		UserID:    int64(userID),
 		TokenType: string(tokenType),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),

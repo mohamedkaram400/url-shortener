@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/mohamedkaram400/url-shortener/auth"
@@ -103,8 +104,70 @@ func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip strin
 	return user, accessToken, refreshToken, nil
 }
 
+func (s *AuthService) RefreshToken(
+	ctx context.Context,
+	refreshToken string,
+	ip string,
+	device string,
+	) (string, string, error) {
+
+	// 1. Validate JWT first
+	claims, err := auth.ValidateJWT(s.JWTSecret, refreshToken)
+	if err != nil {
+		return "", "", coreErrors.ErrInvalidCredentials
+	}
+ 
+	if claims.TokenType != "refresh" {
+		return "", "", errors.New("invalid token type")
+	}
+
+	// 2. Hash refresh token
+	hashedToken := pkg.HashToken(refreshToken)
+
+	// 3. Check session in DB
+	session, err := s.Repo.GetValidSessionByRefreshToken(ctx, hashedToken)
+	if err != nil {
+		return "", "", coreErrors.ErrInvalidCredentials
+	}
+
+	// 4. ROTATION (delete old refresh token)
+	if err := s.Repo.DeleteSession(ctx, session.ID); err != nil {
+		return "", "", err
+	}
+
+	// 5. Issue new tokens
+	newAccess, newRefresh, err := auth.IsuueTokens(
+		s.JWTSecret,
+		s.AccessTokenTime,
+		s.RefrashTokenTime,
+		session.UserID,
+	)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 6. Store new hashed token
+	newHashed := pkg.HashToken(newRefresh)
+
+	newSession := entities.Session{
+		UserID:       session.UserID,
+		Device:       device,
+		IpAddress:    ip,
+		RefreshToken: newHashed,
+		ExpiresAt:    time.Now().Add(time.Duration(s.RefrashTokenTime) * 24 * time.Hour),
+	}
+
+	if err := s.Repo.CreateSession(ctx, &newSession); err != nil {
+		return "", "", err
+	}
+
+	return newAccess, newRefresh, nil
+}
+
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) (string, error) {
-	err := s.Repo.Logout(ctx, refreshToken)
+	hashedToken := pkg.HashToken(refreshToken)
+
+	err := s.Repo.Logout(ctx, hashedToken)
 	if err != nil {
 		return "", err
 	}

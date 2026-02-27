@@ -53,7 +53,7 @@ func main() {
 	api := router.Group("/api")
 
 
-	routes.RegisterUserAuthRoutes(api, authUserHandler)
+	routes.RegisterUserAuthRoutes(api, authUserHandler, config.JWTSecretKey)
 
 	TestServer(router)
 	StartServer(router, config)

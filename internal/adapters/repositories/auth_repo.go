@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
 	"gorm.io/gorm"
@@ -63,9 +64,31 @@ func (r *AuthRepo) CreateSession(ctx context.Context, session *entities.Session)
 	return r.DB.WithContext(ctx).Create(session).Error
 }
 
-func (r *AuthRepo) Logout(ctx context.Context, refreshToken string) error {
+func (r *AuthRepo) DeleteSession(ctx context.Context, sessionID uint) (error) {
+	if err := r.DB.WithContext(ctx).Where("id = ?", sessionID).Delete(&entities.Session{}).Error; err != nil {
+		return err
+	}
+	return nil
+}
 
-	if err := r.DB.WithContext(ctx).Where("refresh_token = ?", refreshToken).Delete(&entities.Session{}).Error; err != nil {
+func (r *AuthRepo) GetValidSessionByRefreshToken(ctx context.Context, hashedToken string) (*entities.Session, error) {
+
+	var session entities.Session
+
+	err := r.DB.WithContext(ctx).
+		Where("refresh_token = ?", hashedToken).
+		Where("expires_at > ?", time.Now()).
+		First(&session).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+func (r *AuthRepo) Logout(ctx context.Context, HashedToken string) error {
+	if err := r.DB.WithContext(ctx).Where("refresh_token = ?", HashedToken).Delete(&entities.Session{}).Error; err != nil {
 		return err
 	}
 

@@ -2,14 +2,15 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	coreErrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
 	"github.com/mohamedkaram400/url-shortener/internal/core/services"
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
 	"github.com/mohamedkaram400/url-shortener/internal/responses"
+	"github.com/mohamedkaram400/url-shortener/pkg"
 )
 
 type AuthHandler struct {
@@ -83,20 +84,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-    authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		respondError(c, http.StatusUnauthorized, errors.New("invalid authorization header"))
-		return
-	}
-
-	// Split "Bearer <token>"
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 && strings.ToLower(parts[0]) != "bearer" {
-		respondError(c, http.StatusUnauthorized, errors.New("invalid authorization header"))
+	authHeader := c.GetHeader("Authorization")
+	refreshToken, err := pkg.ExtractTokenFromHeader(authHeader)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.Abort()
 		return 
 	}
 
-	refreshToken := parts[1]
+	fmt.Println("LOGOUT ERROR:", err)
+	fmt.Printf("TYPE: %T\n", err)
 
 	message, err := h.AuthService.Logout(c, refreshToken)
 	if err != nil {
@@ -106,6 +103,32 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": message})
 }
+
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	var req struct {
+		RefreshToken	string	`"json"refresh_token"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusUnprocessableEntity, err)
+		return
+	}
+
+	ip := c.ClientIP()
+	device := c.GetHeader("User-Agent")
+
+	accessToken, refreshToken, err := h.AuthService.RefreshToken(c, req.RefreshToken, ip, device)
+	if err != nil {
+		respondError(c, http.StatusUnauthorized, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": accessToken,
+		"refresh_token": refreshToken,
+	})
+}
+
 
 // =========================
 // Helper: standard error response
