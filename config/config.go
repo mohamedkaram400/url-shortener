@@ -6,29 +6,38 @@ import (
 )
 
 type Config struct {
-	AppPort	string
-
+	AppPort			string
+	BaseUrl			string
 	DatabaseURL		string
 	RedisServer		string
+	JWTSecretKey	string	
+	ShortCodeLenght	int	
 	AccessTokenTime		int
 	RefrashTokenTime	int
-	JWTSecretKey		string	
 }
 
 func LoadData() *Config {
 
-	accessTokenTime, _ := strconv.Atoi(os.Getenv("ACCESS_TOKEN_TIME"))
-	refrashTokenTime, _ := strconv.Atoi(os.Getenv("REFRASH_TOKEN_TIME"))
+	refrashTokenTimeStr := getOrDefault("REFRASH_TOKEN_TIME", "30")
+	refrashTokenTimeInt, _ := strconv.Atoi(refrashTokenTimeStr)
+
+	accessTokenTimeStr := getOrDefault("ACCESS_TOKEN_TIME", "15")
+	accessTokenTimeInt, _ := strconv.Atoi(accessTokenTimeStr)
+
+	shortCodeLengthStr := getOrDefault("SHORT_CODE_LENGTH", "7")
+	shortCodeLengthInt, _ := strconv.Atoi(shortCodeLengthStr)
 
 	return &Config{
 		AppPort:           getOrDefault("APP_PORT", ":9000"),
 
 		// Postgres connection data
+		BaseUrl:  	      	  os.Getenv("BASE_URL"),
 		DatabaseURL:  	      os.Getenv("DB_URL"),
 		RedisServer:  	      os.Getenv("REDIS_SERVER"),
 		JWTSecretKey:		  os.Getenv("JWT_SECRET_KEY"),
-		AccessTokenTime:	  accessTokenTime,
-		RefrashTokenTime:	  refrashTokenTime,
+		ShortCodeLenght:      shortCodeLengthInt,
+		AccessTokenTime:	  accessTokenTimeInt,
+		RefrashTokenTime:	  refrashTokenTimeInt,
 	}
 }
 

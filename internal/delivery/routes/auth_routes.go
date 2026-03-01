@@ -3,10 +3,9 @@ package routes
 import (
 	"github.com/gin-gonic/gin"
 	handlers "github.com/mohamedkaram400/url-shortener/internal/delivery/handlers"
-	// "github.com/mohamedkaram400/url-shortener/internal/delivery/middlewares"
 )
 
-func RegisterUserAuthRoutes(rg *gin.RouterGroup, authHandler *handlers.AuthHandler, secretKey string) {
+func RegisterUserAuthRoutes(rg *gin.RouterGroup, authHandler *handlers.AuthHandler) {
 	auth := rg.Group("/auth")
 
 	{
@@ -15,12 +14,5 @@ func RegisterUserAuthRoutes(rg *gin.RouterGroup, authHandler *handlers.AuthHandl
         auth.POST("/refresh-token",  authHandler.RefreshToken)
 
 		auth.POST("/logout", authHandler.Logout)
-
-		// 🔐 Protected routes
-		// protected := auth.Group("/")
-		// protected.Use(middlewares.AuthMiddleware(secretKey))
-		// {
-		// 	protected.POST("/logout", authHandler.Logout)
-		// }
 	}
 }

@@ -44,6 +44,10 @@ func main() {
 	authUserService := services.NewAuthService(authUserRepo, config.AccessTokenTime, config.RefrashTokenTime, config.JWTSecretKey)
 	authUserHandler := handlers.NewAuthHandler(authUserService)
 
+	// User Auth Module
+	shortUrlRepo := repositories.NewUrlGenerationRepo(db)
+	shortUrlService := services.NewUrlGenerationService(shortUrlRepo, config.ShortCodeLenght)
+	urlGenerationHandler := handlers.NewUrlGenerationHandler(shortUrlService)
 
 
 	// Init router
@@ -53,7 +57,9 @@ func main() {
 	api := router.Group("/api")
 
 
-	routes.RegisterUserAuthRoutes(api, authUserHandler, config.JWTSecretKey)
+	routes.RegisterUserAuthRoutes(api, authUserHandler)
+	routes.RegisterUrlGenerationRoutes(api, urlGenerationHandler, config.JWTSecretKey)
+
 
 	TestServer(router)
 	StartServer(router, config)

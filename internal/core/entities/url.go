@@ -10,6 +10,7 @@ type Url struct {
 	Status      string     `json:"status" gorm:"column:status;type:varchar(20);not null;default:'Active'"`
 	UserID      uint       `json:"user_id" gorm:"column:user_id;not null;index"`
 	ClickCount  int        `json:"click_count" gorm:"column:click_count;default:0"`
+	CustomAlias string     `json:"custom_alias" gorm:"column:custom_alias;varchar(20)"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty" gorm:"column:expires_at"`
 	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt   time.Time  `json:"updated_at" gorm:"autoUpdateTime"`

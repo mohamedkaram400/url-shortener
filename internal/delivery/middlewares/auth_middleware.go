@@ -1,7 +1,9 @@
 package middlewares
 
 import (
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mohamedkaram400/url-shortener/auth"
@@ -10,7 +12,7 @@ import (
 
 func AuthMiddleware(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-
+		
 		authHeader := c.GetHeader("Authorization")
 		tokenString, err := pkg.ExtractTokenFromHeader(authHeader)
 		if err != nil {
@@ -18,6 +20,10 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		
+		log.Println("RAW HEADER:", authHeader)
+		log.Println("TOKEN STRING:", tokenString)
+		log.Println("PARTS:", strings.Split(tokenString, "."))
 
 		claims, err := auth.ValidateJWT(secret, tokenString)
 		if err != nil {

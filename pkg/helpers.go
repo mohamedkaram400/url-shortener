@@ -4,10 +4,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"strings"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"math/big"
+	"crypto/rand"
+	"strings"
 )
+
+// Auth
 
 func HashPassword(password string) (string, error) {
 	// The cost parameter controls how slow the hash is.
@@ -48,4 +53,28 @@ func ExtractTokenFromHeader(authHeader string) (string, error) {
 	}
 
 	return parts[1], nil
+}
+
+
+// Url
+
+const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+func GenerateShortCode(shortCodeLenght int) (string, error) {
+	shortCode := make([]byte, shortCodeLenght)	
+
+	charsetLen := big.NewInt(int64(len(characters)))
+
+	for i := 0; i < shortCodeLenght; i ++ {
+		// Generate a random index within the charset length using crypto/rand
+		randomIndex, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", err
+		}
+
+		// Append the character at the random index to the result
+		shortCode[i] = characters[int(randomIndex.Uint64())]
+	}
+
+	return string(shortCode), nil
 }
