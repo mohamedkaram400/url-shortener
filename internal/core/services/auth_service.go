@@ -21,16 +21,16 @@ type AuthService struct {
 	JWTSecret string
 }
 
-func NewAuthService(authRepo ports.UserAuthRepository, accessTokenTime int, refrashTokenTime int, secret string) *AuthService {
-	return &AuthService{Repo: authRepo, JWTSecret: secret, AccessTokenTime: accessTokenTime, RefrashTokenTime: refrashTokenTime}
+func NewAuthService(authRepo ports.UserAuthRepository, accessTokenTime int, refrashTokenTime int, secretKey string) *AuthService {
+	return &AuthService{Repo: authRepo, JWTSecret: secretKey, AccessTokenTime: accessTokenTime, RefrashTokenTime: refrashTokenTime}
 }
 
-func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest) (*entities.User, string, string, error) {
+func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest, ip string, device string) (*entities.User, string, string, int, error) {
 	var fieldErrors []*coreErrors.FieldError
 
 	emailExists, usernameExists, err := s.Repo.CheckEmailOrUsernameExists(ctx, req.Email, req.UserName)
 	if err != nil {
-		return nil, "", "", err
+		return nil, "", "", 0, err
 	}
 
 	if emailExists {
@@ -41,12 +41,12 @@ func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 	}
 
 	if len(fieldErrors) > 0 {
-		return nil, "", "", &coreErrors.MultiFieldError{Errors: fieldErrors}
+		return nil, "", "", 0, &coreErrors.MultiFieldError{Errors: fieldErrors}
 	}
 
 	hashedPassword, err := pkg.HashPassword(req.Password)
 		if err != nil {
-		return nil, "", "", err
+		return nil, "", "", 0, err
 	}
 
 	user := &entities.User{
@@ -59,32 +59,12 @@ func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 
 	user, err = s.Repo.Register(ctx, user)
 	if err != nil {
-		return nil, "", "", err
+		return nil, "", "", 0, err
 	}
 
 	accessToken, refreshToken, err := auth.IsuueTokens(s.JWTSecret, s.AccessTokenTime, s.RefrashTokenTime, user.ID)
 	if err != nil {
-		return nil, "", "", err
-	}
-
-	return user, accessToken, refreshToken, nil
-}
-
-func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip string, device string) (*entities.User, string, string, error) {
-
-	user, err := s.Repo.GetUserByEmail(ctx, req.Email)
-	if err != nil || user == nil {
-		return nil, "", "", coreErrors.ErrUserNotFound
-	}
-
-	// check password
-	if err := pkg.CheckPassword(user.Password, req.Password); err != nil {
-		return nil, "", "", coreErrors.ErrInvalidCredentials
-	}
-
-	accessToken, refreshToken, err := auth.IsuueTokens(s.JWTSecret, s.AccessTokenTime, s.RefrashTokenTime, user.ID)
-	if err != nil {
-		return nil, "", "", err
+		return nil, "", "", 0, err
 	}
 
 	hashedToken := pkg.HashToken(refreshToken)
@@ -98,10 +78,48 @@ func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip strin
 	}
 
 	if err := s.Repo.CreateSession(ctx, &session); err != nil {
-		return nil, "", "", err
+		return nil, "", "", 0, err
 	}
 
-	return user, accessToken, refreshToken, nil
+	maxAge := int(time.Duration(s.RefrashTokenTime) * 24 * time.Hour / time.Second)
+
+	return user, accessToken, refreshToken, maxAge, nil
+}
+
+func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip string, device string) (*entities.User, string, string, int, error) {
+
+	user, err := s.Repo.GetUserByEmail(ctx, req.Email)
+	if err != nil || user == nil {
+		return nil, "", "", 0, coreErrors.ErrUserNotFound
+	}
+
+	// check password
+	if err := pkg.CheckPassword(user.Password, req.Password); err != nil {
+		return nil, "", "", 0, coreErrors.ErrInvalidCredentials
+	}
+
+	accessToken, refreshToken, err := auth.IsuueTokens(s.JWTSecret, s.AccessTokenTime, s.RefrashTokenTime, user.ID)
+	if err != nil {
+		return nil, "", "", 0, err
+	}
+
+	hashedToken := pkg.HashToken(refreshToken)
+
+	session := entities.Session{
+		UserID:       user.ID,
+		Device:       device,
+		RefreshToken: hashedToken,
+		IpAddress:    ip,
+		ExpiresAt:    time.Now().Add(time.Duration(s.RefrashTokenTime) * 24 * time.Hour),
+	}
+
+	if err := s.Repo.CreateSession(ctx, &session); err != nil {
+		return nil, "", "", 0, err
+	}
+
+	maxAge := int(time.Duration(s.RefrashTokenTime) * 24 * time.Hour / time.Second)
+
+	return user, accessToken, refreshToken, maxAge, nil
 }
 
 func (s *AuthService) RefreshToken(
@@ -109,16 +127,16 @@ func (s *AuthService) RefreshToken(
 	refreshToken string,
 	ip string,
 	device string,
-	) (string, string, error) {
+	) (string, string, int, error) {
 
 	// 1. Validate JWT first
 	claims, err := auth.ValidateJWT(s.JWTSecret, refreshToken)
 	if err != nil {
-		return "", "", coreErrors.ErrInvalidCredentials
+		return "", "", 0, err 
 	}
  
 	if claims.TokenType != "refresh" {
-		return "", "", errors.New("invalid token type")
+		return "", "", 0, errors.New("invalid token type")
 	}
 
 	// 2. Hash refresh token
@@ -127,12 +145,12 @@ func (s *AuthService) RefreshToken(
 	// 3. Check session in DB
 	session, err := s.Repo.GetValidSessionByRefreshToken(ctx, hashedToken)
 	if err != nil {
-		return "", "", coreErrors.ErrInvalidCredentials
+		return "", "", 0, err
 	}
 
 	// 4. ROTATION (delete old refresh token)
 	if err := s.Repo.DeleteSession(ctx, session.ID); err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	// 5. Issue new tokens
@@ -143,7 +161,7 @@ func (s *AuthService) RefreshToken(
 		session.UserID,
 	)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	// 6. Store new hashed token
@@ -156,19 +174,28 @@ func (s *AuthService) RefreshToken(
 		RefreshToken: newHashed,
 		ExpiresAt:    time.Now().Add(time.Duration(s.RefrashTokenTime) * 24 * time.Hour),
 	}
+	maxAge := int(time.Duration(s.RefrashTokenTime) * 24 * time.Hour / time.Second)
 
 	if err := s.Repo.CreateSession(ctx, &newSession); err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
-	return newAccess, newRefresh, nil
+	return newAccess, newRefresh, maxAge, nil
 }
 
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) (string, error) {
+	claims, err := auth.ValidateJWT(s.JWTSecret, refreshToken)
+	if err != nil {
+		return "", err
+	}
+
+	if claims.TokenType != "refresh" {
+		return "", errors.New("invalid token type")
+	}
+
 	hashedToken := pkg.HashToken(refreshToken)
 
-	err := s.Repo.Logout(ctx, hashedToken)
-	if err != nil {
+	if err := s.Repo.Logout(ctx, hashedToken); err != nil {
 		return "", err
 	}
 

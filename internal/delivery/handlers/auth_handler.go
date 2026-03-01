@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,7 +9,6 @@ import (
 	"github.com/mohamedkaram400/url-shortener/internal/core/services"
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
 	"github.com/mohamedkaram400/url-shortener/internal/responses"
-	"github.com/mohamedkaram400/url-shortener/pkg"
 )
 
 type AuthHandler struct {
@@ -29,7 +27,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return 
 	}
 
-	user, accessToken, refreshToken, err := h.AuthService.Register(c, &req)
+	ip := c.ClientIP()
+	device := c.GetHeader("User-Agent")
+
+	user, accessToken, refreshToken, maxAge, err := h.AuthService.Register(c, &req, ip, device)
 	if err != nil {
 
 		if errors.Is(err, coreErrors.ErrEmailAlreadyExists) ||
@@ -42,6 +43,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": coreErrors.ValidationError(err),})
 		return
 	}
+
+	// Set refresh token in HttpOnly cookie
+	c.SetCookie(
+		"refresh_token",
+		refreshToken,
+		maxAge,
+		"/",
+		"url-shortener.test",
+		false, // secure (true in HTTPS)
+		true,  // HttpOnly
+	)
 
 	c.JSON(201, responses.AuthResponse{
 		Message: "User Register Successfully",
@@ -62,7 +74,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	ip := c.ClientIP()
 	device := c.GetHeader("User-Agent")
 
-	user, accessToken, refreshToken, err := h.AuthService.Login(c, &req, ip, device)
+	user, accessToken, refreshToken, maxAge, err := h.AuthService.Login(c, &req, ip, device)
 	if err != nil {
 		switch {
 		case errors.Is(err, coreErrors.ErrUserNotFound),
@@ -75,6 +87,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 	}
 
+	// Set refresh token in HttpOnly cookie
+	c.SetCookie(
+		"refresh_token",
+		refreshToken,
+		maxAge,
+		"/",
+		"url-shortener.test",
+		false, // secure (true in HTTPS)
+		true,  // HttpOnly
+	)
+
 	c.JSON(200, responses.AuthResponse{
 		Message: "User Login Successfully",
 		AccessToken: accessToken,
@@ -84,16 +107,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
-	refreshToken, err := pkg.ExtractTokenFromHeader(authHeader)
+	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		c.Abort()
-		return 
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token missing"})
+		return
 	}
-
-	fmt.Println("LOGOUT ERROR:", err)
-	fmt.Printf("TYPE: %T\n", err)
 
 	message, err := h.AuthService.Logout(c, refreshToken)
 	if err != nil {
@@ -101,27 +119,47 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return 	
 	}
 
+	// 🧹 Clear cookie
+	c.SetCookie(
+		"refresh_token",
+		"",
+		-1, // delete cookie
+		"/",
+		"url-shortener.test",
+		false,
+		true,
+	)
+
 	c.JSON(http.StatusOK, gin.H{"message": message})
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var req struct {
-		RefreshToken	string	`"json"refresh_token"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusUnprocessableEntity, err)
+	// Get refresh token from cookie
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token missing"})
 		return
 	}
 
 	ip := c.ClientIP()
 	device := c.GetHeader("User-Agent")
 
-	accessToken, refreshToken, err := h.AuthService.RefreshToken(c, req.RefreshToken, ip, device)
+	accessToken, refreshToken, maxAge, err := h.AuthService.RefreshToken(c, refreshToken, ip, device)
 	if err != nil {
 		respondError(c, http.StatusUnauthorized, err)
 		return
 	}
+
+	// Set new rotated refresh token
+	c.SetCookie(
+		"refresh_token",
+		refreshToken,
+		maxAge,
+		"/",
+		"url-shortener.test",
+		false,
+		true,
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": accessToken,
