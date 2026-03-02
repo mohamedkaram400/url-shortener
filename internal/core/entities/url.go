@@ -13,7 +13,6 @@ type Url struct {
 	CustomAlias string     `json:"custom_alias" gorm:"column:custom_alias;varchar(20)"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty" gorm:"column:expires_at"`
 	CreatedAt   time.Time  `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 
 	User         User       `json:"user" gorm:"foreignKey:UserID;references:ID"`
 }

@@ -46,7 +46,7 @@ func main() {
 
 	// User Auth Module
 	shortUrlRepo := repositories.NewUrlGenerationRepo(db)
-	shortUrlService := services.NewUrlGenerationService(shortUrlRepo, config.ShortCodeLenght)
+	shortUrlService := services.NewUrlGenerationService(shortUrlRepo, config.ShortCodeLenght, config.BaseURL)
 	urlGenerationHandler := handlers.NewUrlGenerationHandler(shortUrlService)
 
 
@@ -56,7 +56,10 @@ func main() {
 	router.Use(gin.Logger(), gin.Recovery())
 	api := router.Group("/api")
 
+	// Public redirect route OUTSIDE api
+	router.GET("/:code", urlGenerationHandler.Redirect)
 
+	// Protected URL APIs
 	routes.RegisterUserAuthRoutes(api, authUserHandler)
 	routes.RegisterUrlGenerationRoutes(api, urlGenerationHandler, config.JWTSecretKey)
 

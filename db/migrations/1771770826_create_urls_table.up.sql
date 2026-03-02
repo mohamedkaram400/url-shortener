@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS urls (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     status VARCHAR(20) CHECK (status IN ('Active','Expired','Disabled')),
     expires_at DATE,
+    custom_alias VARCHAR(50),
     click_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -8,4 +8,6 @@ import (
 
 type UrlGenerationRepository interface {
 	CreateUrl(ctx context.Context, url *entities.Url) (error)
+	ShortCodeExists(ctx context.Context, shortCode string) (bool, error)
+	GetByShortCode(ctx context.Context, code string) (*entities.Url, error)
 }

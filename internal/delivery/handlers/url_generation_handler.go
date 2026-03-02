@@ -37,3 +37,15 @@ func (h *UrlGenerationHandler) GenerateShortUrl(c *gin.Context) {
 	// Return the response with short url
 	c.JSON(http.StatusCreated, gin.H{"short_url": shortUrl, "long_url": req.LongUrl})
 }
+
+func (h *UrlGenerationHandler) Redirect(c *gin.Context) {
+	code := c.Param("code")
+
+	originalURL, err := h.UrlGenerationService.GetByShortCode(c, code)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Redirect(http.StatusMovedPermanently, originalURL) // 301
+}

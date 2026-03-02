@@ -7,7 +7,7 @@ import (
 
 type Config struct {
 	AppPort			string
-	BaseUrl			string
+	BaseURL			string
 	DatabaseURL		string
 	RedisServer		string
 	JWTSecretKey	string	
@@ -31,7 +31,7 @@ func LoadData() *Config {
 		AppPort:           getOrDefault("APP_PORT", ":9000"),
 
 		// Postgres connection data
-		BaseUrl:  	      	  os.Getenv("BASE_URL"),
+		BaseURL:  	      	  os.Getenv("BASE_URL"),
 		DatabaseURL:  	      os.Getenv("DB_URL"),
 		RedisServer:  	      os.Getenv("REDIS_SERVER"),
 		JWTSecretKey:		  os.Getenv("JWT_SECRET_KEY"),
