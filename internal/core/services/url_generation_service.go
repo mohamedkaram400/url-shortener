@@ -2,20 +2,20 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
+	domainerrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
 	"github.com/mohamedkaram400/url-shortener/internal/ports"
 	"github.com/mohamedkaram400/url-shortener/pkg"
 )
 
 type UrlGenerationService struct {
-	Repo ports.UrlGenerationRepository
+	Repo            ports.UrlGenerationRepository
 	ShortCodeLenght int
-	BaseURL string
+	BaseURL         string
 }
 
 func NewUrlGenerationService(repo ports.UrlGenerationRepository, shortCodeLenght int, baseUrl string) *UrlGenerationService {
@@ -25,6 +25,7 @@ func NewUrlGenerationService(repo ports.UrlGenerationRepository, shortCodeLenght
 func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, req *dto.ShortenUrlRequest) (string, error) {
 
 	var expiresAt *time.Time
+	var shortCode string
 
 	// only calculate if user provided expiration
 	if req.ExpirationDays > 0 {
@@ -32,20 +33,20 @@ func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, req *dto.Sh
 		expiresAt = &t
 	}
 
-	var shortCode string
+	if req.CustomAlias != nil && *req.CustomAlias != "" {
 
-	if req.CustomAlias != "" {
+		alias := *req.CustomAlias
 
-		exists, err := s.Repo.ShortCodeExists(ctx, req.CustomAlias)
+		exists, err := s.Repo.ShortCodeExists(ctx, alias)
 		if err != nil {
-            return "", err
+			return "", err
 		}
 
 		if exists {
-            return "", errors.New("custom alias already taken")
+			return "", domainerrors.ErrShortCodeExists
 		}
 
-		shortCode = req.CustomAlias
+		shortCode = alias
 	} else {
 
 		for {
@@ -57,28 +58,28 @@ func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, req *dto.Sh
 			}
 
 			exists, err := s.Repo.ShortCodeExists(ctx, code)
-            if err != nil {
-                return "", err
-            }
+			if err != nil {
+				return "", err
+			}
 
 			if !exists {
-				shortCode = code 
+				shortCode = code
 				break
 			}
 		}
 	}
-	
-	url := entities.Url{
-		OriginalURL:       req.LongUrl,
-		Status:       	   req.Status,
-		UserID:       	   req.UserId,
-		CustomAlias:	   req.CustomAlias,
 
-		ExpiresAt:    	   expiresAt,
-		ShortCode:         shortCode,
+	url := entities.Url{
+		OriginalURL: req.LongUrl,
+		Status:      req.Status,
+		UserID:      req.UserId,
+		CustomAlias: req.CustomAlias,
+
+		ExpiresAt: expiresAt,
+		ShortCode: shortCode,
 	}
 
-	if err := s.Repo.CreateUrl(ctx, &url);  err != nil {
+	if err := s.Repo.CreateUrl(ctx, &url); err != nil {
 		return "", err
 	}
 
@@ -88,15 +89,23 @@ func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, req *dto.Sh
 	return shortUrl, nil
 }
 
-func (s *UrlGenerationService) GetByShortCode(c context.Context, code string) (string, error) {
+func (s *UrlGenerationService) Redirect(c context.Context, code string) (string, error) {
 	url, err := s.Repo.GetByShortCode(c, code)
 	if err != nil {
 		return "", err
 	}
 
 	if url.ExpiresAt != nil && time.Now().After(*url.ExpiresAt) {
-        return "", errors.New("link expired")
-    }
+		return "", domainerrors.ErrURLInactive
+	}
+
+	if url.Status != "Active" {
+		return "", domainerrors.ErrURLInactive
+	}
+
+	if err := s.Repo.IncreaseCount(c, code); err != nil {
+		return "", err
+	}
 
 	return url.OriginalURL, nil
 }

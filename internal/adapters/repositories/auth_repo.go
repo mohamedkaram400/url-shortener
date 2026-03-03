@@ -3,9 +3,10 @@ package repositories
 import (
 	"context"
 	"errors"
-	"time"
 
+	"github.com/lib/pq"
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
+	domainerrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
 	"gorm.io/gorm"
 )
 
@@ -18,16 +19,26 @@ func NewAuthRepo(db *gorm.DB) *AuthRepo {
 }
 
 func (r *AuthRepo) Register(ctx context.Context, user *entities.User) (*entities.User, error) {
-	if err := r.DB.WithContext(ctx).Create(user).Error; err != nil {
-		return nil, err
-	} 
+	err := r.DB.WithContext(ctx).Create(user).Error
 
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" { // duplicate key
+			return nil, domainerrors.ErrUserAlreadyExists
+		}
+		return nil, err
+	}
 	return user, nil
 }
 
 func (r *AuthRepo) GetUserByEmail(ctx context.Context, email string) (*entities.User, error) {
 	var user entities.User
-	if err := r.DB.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+
+	err := r.DB.WithContext(ctx).Where("email = ?", email).First(&user).Error	
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domainerrors.ErrUserNotFound
+		}
 		return nil, err
 	}
 
@@ -48,9 +59,6 @@ func (r *AuthRepo) CheckEmailOrUsernameExists(
 		First(&user).Error
 
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, false, nil
-		}
 		return false, false, err
 	}
 
@@ -60,35 +68,9 @@ func (r *AuthRepo) CheckEmailOrUsernameExists(
 	return emailExists, usernameExists, nil
 }
 
-func (r *AuthRepo) CreateSession(ctx context.Context, session *entities.Session) error {
-	return r.DB.WithContext(ctx).Create(session).Error
-}
-
-func (r *AuthRepo) DeleteSession(ctx context.Context, sessionID uint) (error) {
-	if err := r.DB.WithContext(ctx).Where("id = ?", sessionID).Delete(&entities.Session{}).Error; err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *AuthRepo) GetValidSessionByRefreshToken(ctx context.Context, hashedToken string) (*entities.Session, error) {
-
-	var session entities.Session
-
-	err := r.DB.WithContext(ctx).
-		Where("refresh_token = ?", hashedToken).
-		Where("expires_at > ?", time.Now()).
-		First(&session).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &session, nil
-}
-
 func (r *AuthRepo) Logout(ctx context.Context, HashedToken string) error {
-	if err := r.DB.WithContext(ctx).Where("refresh_token = ?", HashedToken).Delete(&entities.Session{}).Error; err != nil {
+	err := r.DB.WithContext(ctx).Where("refresh_token = ?", HashedToken).Delete(&entities.Session{}).Error
+	if err != nil {
 		return err
 	}
 

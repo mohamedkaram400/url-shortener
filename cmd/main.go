@@ -41,7 +41,8 @@ func main() {
 
 	// User Auth Module
 	authUserRepo := repositories.NewAuthRepo(db)
-	authUserService := services.NewAuthService(authUserRepo, config.AccessTokenTime, config.RefrashTokenTime, config.JWTSecretKey)
+	sessionRepo := repositories.NewSessionRepo(db)
+	authUserService := services.NewAuthService(authUserRepo, sessionRepo, config.AccessTokenTime, config.RefrashTokenTime, config.JWTSecretKey)
 	authUserHandler := handlers.NewAuthHandler(authUserService)
 
 	// User Auth Module

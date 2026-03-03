@@ -2,10 +2,11 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	coreErrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
+	domainerrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
 	"github.com/mohamedkaram400/url-shortener/internal/core/services"
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
 	"github.com/mohamedkaram400/url-shortener/internal/responses"
@@ -23,24 +24,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var req dto.RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(422, gin.H{"error": coreErrors.ValidationError(err)})
+		respondError(c, err)
 		return 
 	}
 
-	ip := c.ClientIP()
-	device := c.GetHeader("User-Agent")
-
-	user, accessToken, refreshToken, maxAge, err := h.AuthService.Register(c, &req, ip, device)
+	user, accessToken, refreshToken, maxAge, err := h.AuthService.Register(c, &req, c.ClientIP(), c.GetHeader("User-Agent"))
 	if err != nil {
-
-		if errors.Is(err, coreErrors.ErrEmailAlreadyExists) ||
-			errors.Is(err, coreErrors.ErrUserNameAlreadyExists) {
-
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error(),})
-			return
-		}
-
-		c.JSON(http.StatusInternalServerError, gin.H{"error": coreErrors.ValidationError(err),})
+		respondError(c, err)
 		return
 	}
 
@@ -55,7 +45,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		true,  // HttpOnly
 	)
 
-	c.JSON(201, responses.AuthResponse{
+	c.JSON(http.StatusCreated, responses.AuthResponse{
 		Message: "User Register Successfully",
 		AccessToken: accessToken,
 		RefreshToken: refreshToken,
@@ -67,25 +57,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var req dto.LoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondError(c, http.StatusUnprocessableEntity, err)
+		respondError(c, err)
 		return 
 	}
 
-	ip := c.ClientIP()
-	device := c.GetHeader("User-Agent")
-
-	user, accessToken, refreshToken, maxAge, err := h.AuthService.Login(c, &req, ip, device)
+	user, accessToken, refreshToken, maxAge, err := h.AuthService.Login(c, &req, c.ClientIP(), c.GetHeader("User-Agent"))
 	if err != nil {
-		switch {
-		case errors.Is(err, coreErrors.ErrUserNotFound),
-			errors.Is(err, coreErrors.ErrInvalidCredentials):
-			respondError(c, http.StatusUnauthorized, err)
-			return
-		default:
-			respondError(c, http.StatusInternalServerError, err)
-			return
-		}
-	}
+        respondError(c, err)
+        return
+    }
 
 	// Set refresh token in HttpOnly cookie
 	c.SetCookie(
@@ -115,7 +95,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	message, err := h.AuthService.Logout(c, refreshToken)
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, err)
+		respondError(c, err)
 		return 	
 	}
 
@@ -137,7 +117,8 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	// Get refresh token from cookie
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token missing"})
+		respondError(c, err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": ""})
 		return
 	}
 
@@ -146,7 +127,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	accessToken, refreshToken, maxAge, err := h.AuthService.RefreshToken(c, refreshToken, ip, device)
 	if err != nil {
-		respondError(c, http.StatusUnauthorized, err)
+		respondError(c, err)
 		return
 	}
 
@@ -171,13 +152,43 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 // =========================
 // Helper: standard error response
 // =========================
-func respondError(c *gin.Context, status int, err error) {
-	// Validation errors (DTO struct validation or custom FieldError)
-	if ve := coreErrors.ValidationError(err); len(ve) > 0 {
-		c.JSON(status, gin.H{"errors": ve})
-		return
-	}
+func respondError(c *gin.Context, err error) {
+    // 1️⃣ Validation errors
+    if ve := domainerrors.ValidationError(err); len(ve) > 0 {
+        c.JSON(http.StatusUnprocessableEntity, gin.H{"errors": ve})
+        return
+    }
 
-	// fallback
-	c.JSON(status, gin.H{"error": err.Error()})
+    // 2️⃣ Domain errors mapping
+    switch {
+    case errors.Is(err, domainerrors.ErrUserNotFound),
+         errors.Is(err, domainerrors.ErrNotFound):
+        c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+        return
+
+    case errors.Is(err, domainerrors.ErrInvalidCredentials):
+        c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+        return
+
+
+    case errors.Is(err, domainerrors.ErrUserAlreadyExists),
+         errors.Is(err, domainerrors.ErrEmailAlreadyExists),
+         errors.Is(err, domainerrors.ErrUserNameAlreadyExists),
+         errors.Is(err, domainerrors.ErrRefreshTokenMissing),
+         errors.Is(err, domainerrors.ErrShortCodeExists):
+        c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+        return
+
+    case errors.Is(err, domainerrors.ErrLinkExpired):
+        c.JSON(http.StatusGone, gin.H{"error": err.Error()})
+        return
+
+    case errors.Is(err, domainerrors.ErrURLInactive):
+        c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+        return
+    }
+
+    // 3️⃣ Fallback for unexpected/internal errors
+    log.Println("Internal error:", err.Error()) // log internally
+    c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }

@@ -2,12 +2,12 @@ package services
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/mohamedkaram400/url-shortener/auth"
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
 	coreErrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
+	domainerrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
 	"github.com/mohamedkaram400/url-shortener/internal/ports"
 	"github.com/mohamedkaram400/url-shortener/pkg"
@@ -15,20 +15,21 @@ import (
 
 
 type AuthService struct {
-	Repo ports.UserAuthRepository
+	AuthRepo ports.UserAuthRepository
+	SessionRepo ports.SessionRepository
 	AccessTokenTime int
 	RefrashTokenTime int
 	JWTSecret string
 }
 
-func NewAuthService(authRepo ports.UserAuthRepository, accessTokenTime int, refrashTokenTime int, secretKey string) *AuthService {
-	return &AuthService{Repo: authRepo, JWTSecret: secretKey, AccessTokenTime: accessTokenTime, RefrashTokenTime: refrashTokenTime}
+func NewAuthService(authRepo ports.UserAuthRepository, sessionRepo ports.SessionRepository, accessTokenTime int, refrashTokenTime int, secretKey string) *AuthService {
+	return &AuthService{AuthRepo: authRepo, SessionRepo: sessionRepo, JWTSecret: secretKey, AccessTokenTime: accessTokenTime, RefrashTokenTime: refrashTokenTime}
 }
 
 func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest, ip string, device string) (*entities.User, string, string, int, error) {
 	var fieldErrors []*coreErrors.FieldError
 
-	emailExists, usernameExists, err := s.Repo.CheckEmailOrUsernameExists(ctx, req.Email, req.UserName)
+	emailExists, usernameExists, err := s.AuthRepo.CheckEmailOrUsernameExists(ctx, req.Email, req.UserName)
 	if err != nil {
 		return nil, "", "", 0, err
 	}
@@ -57,7 +58,7 @@ func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest, ip
 		Password:  hashedPassword,
 	}
 
-	user, err = s.Repo.Register(ctx, user)
+	user, err = s.AuthRepo.Register(ctx, user)
 	if err != nil {
 		return nil, "", "", 0, err
 	}
@@ -77,7 +78,7 @@ func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest, ip
 		ExpiresAt:    time.Now().Add(time.Duration(s.RefrashTokenTime) * 24 * time.Hour),
 	}
 
-	if err := s.Repo.CreateSession(ctx, &session); err != nil {
+	if err := s.SessionRepo.CreateSession(ctx, &session); err != nil {
 		return nil, "", "", 0, err
 	}
 
@@ -88,9 +89,9 @@ func (s *AuthService) Register(ctx context.Context, req *dto.RegisterRequest, ip
 
 func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip string, device string) (*entities.User, string, string, int, error) {
 
-	user, err := s.Repo.GetUserByEmail(ctx, req.Email)
+	user, err := s.AuthRepo.GetUserByEmail(ctx, req.Email)
 	if err != nil || user == nil {
-		return nil, "", "", 0, coreErrors.ErrUserNotFound
+		return nil, "", "", 0, coreErrors.ErrNotFound
 	}
 
 	// check password
@@ -113,7 +114,7 @@ func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip strin
 		ExpiresAt:    time.Now().Add(time.Duration(s.RefrashTokenTime) * 24 * time.Hour),
 	}
 
-	if err := s.Repo.CreateSession(ctx, &session); err != nil {
+	if err := s.SessionRepo.CreateSession(ctx, &session); err != nil {
 		return nil, "", "", 0, err
 	}
 
@@ -122,12 +123,7 @@ func (s *AuthService) Login(ctx context.Context, req *dto.LoginRequest, ip strin
 	return user, accessToken, refreshToken, maxAge, nil
 }
 
-func (s *AuthService) RefreshToken(
-	ctx context.Context,
-	refreshToken string,
-	ip string,
-	device string,
-	) (string, string, int, error) {
+func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string, ip string, device string) (string, string, int, error) {
 
 	// 1. Validate JWT first
 	claims, err := auth.ValidateJWT(s.JWTSecret, refreshToken)
@@ -136,20 +132,20 @@ func (s *AuthService) RefreshToken(
 	}
  
 	if claims.TokenType != "refresh" {
-		return "", "", 0, errors.New("invalid token type")
+		return "", "", 0, domainerrors.ErrInvalidCredentials
 	}
 
 	// 2. Hash refresh token
 	hashedToken := pkg.HashToken(refreshToken)
 
 	// 3. Check session in DB
-	session, err := s.Repo.GetValidSessionByRefreshToken(ctx, hashedToken)
+	session, err := s.SessionRepo.GetValidSessionByRefreshToken(ctx, hashedToken)
 	if err != nil {
 		return "", "", 0, err
 	}
 
 	// 4. ROTATION (delete old refresh token)
-	if err := s.Repo.DeleteSession(ctx, session.ID); err != nil {
+	if err := s.SessionRepo.DeleteSession(ctx, session.ID); err != nil {
 		return "", "", 0, err
 	}
 
@@ -176,7 +172,7 @@ func (s *AuthService) RefreshToken(
 	}
 	maxAge := int(time.Duration(s.RefrashTokenTime) * 24 * time.Hour / time.Second)
 
-	if err := s.Repo.CreateSession(ctx, &newSession); err != nil {
+	if err := s.SessionRepo.CreateSession(ctx, &newSession); err != nil {
 		return "", "", 0, err
 	}
 
@@ -190,12 +186,12 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) (string, 
 	}
 
 	if claims.TokenType != "refresh" {
-		return "", errors.New("invalid token type")
+		return "", domainerrors.ErrInvalidCredentials
 	}
 
 	hashedToken := pkg.HashToken(refreshToken)
 
-	if err := s.Repo.Logout(ctx, hashedToken); err != nil {
+	if err := s.AuthRepo.Logout(ctx, hashedToken); err != nil {
 		return "", err
 	}
 
