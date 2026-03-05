@@ -171,7 +171,6 @@ func respondError(c *gin.Context, err error) {
         c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
         return
 
-
     case errors.Is(err, domainerrors.ErrUserAlreadyExists),
          errors.Is(err, domainerrors.ErrEmailAlreadyExists),
          errors.Is(err, domainerrors.ErrUserNameAlreadyExists),
