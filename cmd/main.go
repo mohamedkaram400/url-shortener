@@ -4,28 +4,29 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-migrate/migrate/v4"
+	"github.com/joho/godotenv"
 	"github.com/mohamedkaram400/url-shortener/config"
 	"github.com/mohamedkaram400/url-shortener/conn"
 	"github.com/mohamedkaram400/url-shortener/db/seeders"
 	"github.com/mohamedkaram400/url-shortener/internal/adapters/repositories"
+	"github.com/mohamedkaram400/url-shortener/pkg"
 
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/mohamedkaram400/url-shortener/internal/core/services"
 	"github.com/mohamedkaram400/url-shortener/internal/delivery/handlers"
 	"github.com/mohamedkaram400/url-shortener/internal/delivery/routes"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 
 func main() {
 
 	// Load config
+	godotenv.Load()
 	config := config.LoadData()
 
 	// Connect DB, Redis Cache
 	db, sqlDB := conn.ConnectPostgres(config.DatabaseURL)
-
 	redisClient := conn.ConnectRedis(config.RedisServer)
 
 	
@@ -34,7 +35,7 @@ func main() {
 	defer redisClient.Close()
 
 	// Run migrations
-	runMigrations(config.DatabaseURL)
+	pkg.RunMigrations(config.DatabaseURL)
 
 	// Run seeders
 	seeders.Run(db)
@@ -43,7 +44,7 @@ func main() {
 	authUserRepo := repositories.NewAuthRepo(db)
 	sessionRepo := repositories.NewSessionRepo(db)
 	authUserService := services.NewAuthService(authUserRepo, sessionRepo, config.AccessTokenTime, config.RefrashTokenTime, config.JWTSecretKey)
-	authUserHandler := handlers.NewAuthHandler(authUserService)
+	authUserHandler := handlers.NewAuthHandler(authUserService, config.BaseURL)
 
 	// User Auth Module
 	shortUrlRepo := repositories.NewUrlGenerationRepo(db)
@@ -71,7 +72,8 @@ func main() {
 
 
 func StartServer(router *gin.Engine, config *config.Config) {
-	if err := router.Run(config.AppPort); err != nil {
+	// router.SetTrustedProxies([]string{"127.0.0.1"})
+	if err := router.Run("0.0.0.0:" + config.AppPort); err != nil {
 		log.Fatal("❌ Failed to start server:", err)
 	}
 	log.Println("🚀 App started on port", config.AppPort)
@@ -83,20 +85,3 @@ func TestServer(router *gin.Engine) {
 	})
 }
 
-
-func runMigrations(dbURL string) {
-	m, err := migrate.New(
-		"file://./db/migrations", 
-		dbURL,
-	)
-	if err != nil {
-		log.Fatal("❌ Failed to create migrate instance:", err)
-	}
-
-	err = m.Up() // runs all pending migrations
-	if err != nil && err != migrate.ErrNoChange {
-		log.Fatal("❌ Failed to run migrations:", err)
-	}
-
-	log.Println("✅ Migrations ran successfully!")
-}

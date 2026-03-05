@@ -5,6 +5,8 @@ ENV CGO_ENABLED=0
 
 WORKDIR /build
 
+RUN go install github.com/cosmtrek/air@latest
+
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -15,7 +17,7 @@ RUN go build -o main ./cmd/main.go
 # ---------- Runtime stage ----------
 FROM alpine:3.21
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl tzdata
 
 WORKDIR /app
 

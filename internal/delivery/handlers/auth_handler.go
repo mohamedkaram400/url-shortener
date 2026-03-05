@@ -14,10 +14,11 @@ import (
 
 type AuthHandler struct {
 	AuthService *services.AuthService
+	BaseURL		string
 }
 
-func NewAuthHandler(authService *services.AuthService) *AuthHandler {
-	return &AuthHandler{AuthService: authService}
+func NewAuthHandler(authService *services.AuthService, baseURL string) *AuthHandler {
+	return &AuthHandler{AuthService: authService, BaseURL: baseURL}
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -40,7 +41,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		refreshToken,
 		maxAge,
 		"/",
-		"url-shortener.test",
+		h.BaseURL,
 		false, // secure (true in HTTPS)
 		true,  // HttpOnly
 	)
@@ -73,7 +74,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		refreshToken,
 		maxAge,
 		"/",
-		"url-shortener.test",
+		h.BaseURL,
 		false, // secure (true in HTTPS)
 		true,  // HttpOnly
 	)
@@ -105,7 +106,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		"",
 		-1, // delete cookie
 		"/",
-		"url-shortener.test",
+		h.BaseURL,
 		false,
 		true,
 	)
@@ -137,7 +138,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		refreshToken,
 		maxAge,
 		"/",
-		"url-shortener.test",
+		h.BaseURL,
 		false,
 		true,
 	)

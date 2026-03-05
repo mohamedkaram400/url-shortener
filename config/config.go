@@ -28,7 +28,7 @@ func LoadData() *Config {
 	shortCodeLengthInt, _ := strconv.Atoi(shortCodeLengthStr)
 
 	return &Config{
-		AppPort:           getOrDefault("APP_PORT", ":9000"),
+		AppPort:           getOrDefault("APP_PORT", "9000"),
 
 		// Postgres connection data
 		BaseURL:  	      	  os.Getenv("BASE_URL"),

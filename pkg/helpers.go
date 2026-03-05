@@ -4,11 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log"
 
+	"github.com/golang-migrate/migrate/v4"
 	"golang.org/x/crypto/bcrypt"
 
-	"math/big"
 	"crypto/rand"
+	"math/big"
 	"strings"
 )
 
@@ -77,4 +79,26 @@ func GenerateShortCode(shortCodeLenght int) (string, error) {
 	}
 
 	return string(shortCode), nil
+}
+
+
+
+
+// DB
+
+func RunMigrations(dbURL string) {
+	m, err := migrate.New(
+		"file://./db/migrations", 
+		dbURL,
+	)
+	if err != nil {
+		log.Fatal("❌ Failed to create migrate instance:", err)
+	}
+
+	err = m.Up() // runs all pending migrations
+	if err != nil && err != migrate.ErrNoChange {
+		log.Fatal("❌ Failed to run migrations:", err)
+	}
+
+	log.Println("✅ Migrations ran successfully!")
 }

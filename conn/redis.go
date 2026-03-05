@@ -13,6 +13,7 @@ func ConnectRedis(redisServer string) (*redis.Client) {
     // Open a connection to the redis
 	RedisClient := redis.NewClient(&redis.Options{
         Addr: redisServer,
+		DB:   0,	
 	})
 
 	// Verify the connection is established and valid by pinging redis

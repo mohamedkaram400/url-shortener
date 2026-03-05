@@ -59,6 +59,10 @@ func (r *AuthRepo) CheckEmailOrUsernameExists(
 		First(&user).Error
 
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+            // No user exists → safe to register
+            return false, false, nil
+        }
 		return false, false, err
 	}
 
