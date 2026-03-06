@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
 	domainerrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
@@ -46,7 +47,6 @@ func (r *UrlGenerationRepo) GetByShortCode(ctx context.Context, code string) (*e
 	var url entities.Url
 
 	err := r.DB.WithContext(ctx).
-        Model(&entities.Url{}).
 		Where("short_code = ?", code).
 		First(&url).Error
 
@@ -57,18 +57,19 @@ func (r *UrlGenerationRepo) GetByShortCode(ctx context.Context, code string) (*e
 		return nil, err
 	}
 
-	return  &url, nil
+	return &url, nil
 }
  
-func (r *UrlGenerationRepo)	IncreaseCount(ctx context.Context, code string) (error) {
+func (r *UrlGenerationRepo)	IncrementClickCount(ctx context.Context, urlID uint64) (error) {
 	err := r.DB.WithContext(ctx).
 			Model(&entities.Url{}).
-			Where("short_code = ?", code).
+			Where("id = ?", urlID).
 			UpdateColumn("click_count", gorm.Expr("click_count + ?", 1)).
 			Error
 
 	if err != nil {
 		return err
 	}
+
 	return nil
 }

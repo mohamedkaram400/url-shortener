@@ -46,12 +46,12 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		true,  // HttpOnly
 	)
 
-	c.JSON(http.StatusCreated, responses.AuthResponse{
-		Message: "User Register Successfully",
-		AccessToken: accessToken,
-		RefreshToken: refreshToken,
-		User: responses.NewAuthResponse(user),
-	})
+	data := responses.AuthUserResponse{
+		Tokens: responses.TokensResponse(accessToken, refreshToken),
+		User: responses.ToUserResponse(user),
+	}
+
+	c.JSON(http.StatusCreated, responses.SuccessResponse("User Register Successfully", data))
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -79,12 +79,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		true,  // HttpOnly
 	)
 
-	c.JSON(200, responses.AuthResponse{
-		Message: "User Login Successfully",
-		AccessToken: accessToken,
-		RefreshToken: refreshToken,
-		User: responses.NewAuthResponse(user),
-	})
+	data := responses.AuthUserResponse{
+		Tokens: responses.TokensResponse(accessToken, refreshToken),
+		User: responses.ToUserResponse(user),
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse("User Login Successfully", data))
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
@@ -143,10 +143,12 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		true,
 	)
 
-	c.JSON(http.StatusOK, gin.H{
-		"access_token": accessToken,
-		"refresh_token": refreshToken,
-	})
+	data := responses.TokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse("Access Token Generated Successfully", data))
 }
 
 
@@ -154,13 +156,13 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 // Helper: standard error response
 // =========================
 func respondError(c *gin.Context, err error) {
-    // 1️⃣ Validation errors
+    // 1. Validation errors
     if ve := domainerrors.ValidationError(err); len(ve) > 0 {
         c.JSON(http.StatusUnprocessableEntity, gin.H{"errors": ve})
         return
     }
 
-    // 2️⃣ Domain errors mapping
+    // 2. Domain errors mapping
     switch {
     case errors.Is(err, domainerrors.ErrUserNotFound),
          errors.Is(err, domainerrors.ErrNotFound):
@@ -188,7 +190,7 @@ func respondError(c *gin.Context, err error) {
         return
     }
 
-    // 3️⃣ Fallback for unexpected/internal errors
+    // 3. Fallback for unexpected/internal errors
     log.Println("Internal error:", err.Error()) // log internally
     c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }

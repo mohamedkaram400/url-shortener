@@ -22,7 +22,7 @@ func NewUrlGenerationService(repo ports.UrlGenerationRepository, shortCodeLenght
 	return &UrlGenerationService{Repo: repo, ShortCodeLenght: shortCodeLenght, BaseURL: baseUrl}
 }
 
-func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, req *dto.ShortenUrlRequest) (string, error) {
+func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, userID uint64, req *dto.ShortenUrlRequest) (string, error) {
 
 	var expiresAt *time.Time
 	var shortCode string
@@ -72,7 +72,7 @@ func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, req *dto.Sh
 	url := entities.Url{
 		OriginalURL: req.LongUrl,
 		Status:      req.Status,
-		UserID:      req.UserId,
+		UserID:      userID,
 		CustomAlias: req.CustomAlias,
 
 		ExpiresAt: expiresAt,
@@ -95,15 +95,15 @@ func (s *UrlGenerationService) Redirect(c context.Context, code string) (string,
 		return "", err
 	}
 
-	if url.ExpiresAt != nil && time.Now().After(*url.ExpiresAt) {
-		return "", domainerrors.ErrURLInactive
-	}
-
 	if url.Status != "Active" {
 		return "", domainerrors.ErrURLInactive
 	}
 
-	if err := s.Repo.IncreaseCount(c, code); err != nil {
+	if url.ExpiresAt != nil && time.Now().After(*url.ExpiresAt) {
+		return "", domainerrors.ErrLinkExpired
+	}
+
+	if err := s.Repo.IncrementClickCount(c, url.ID); err != nil {
 		return "", err
 	}
 

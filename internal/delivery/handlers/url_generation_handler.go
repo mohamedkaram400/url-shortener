@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mohamedkaram400/url-shortener/internal/core/services"
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
+	"github.com/mohamedkaram400/url-shortener/internal/responses"
 )
 
 type UrlGenerationHandler struct {
@@ -26,15 +27,22 @@ func (h *UrlGenerationHandler) GenerateShortUrl(c *gin.Context) {
 		return 
 	}
 
+	userID, _ := c.Get("userID")
+
 	// Pass the request the generation short url service
-	shortUrl, err := h.UrlGenerationService.GenerateShortUrl(c, &req)
+	shortURL, err := h.UrlGenerationService.GenerateShortUrl(c.Request.Context(), userID.(uint64), &req)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
+	data := responses.URLResponse{
+		ShortURL: shortURL,
+		LongURL:  req.LongUrl,
+	}
+
 	// Return the response with short url
-	c.JSON(http.StatusCreated, gin.H{"short_url": shortUrl, "long_url": req.LongUrl})
+	c.JSON(http.StatusCreated, responses.SuccessResponse("URL Generated successfully", data))
 }
 
 func (h *UrlGenerationHandler) Redirect(c *gin.Context) {
@@ -46,5 +54,5 @@ func (h *UrlGenerationHandler) Redirect(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusMovedPermanently, originalURL) // 301
+	c.Redirect(http.StatusFound, originalURL) // 301
 }

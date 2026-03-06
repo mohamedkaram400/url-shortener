@@ -26,7 +26,7 @@ func (r *SessionRepo) CreateSession(ctx context.Context, session *entities.Sessi
 	return nil
 }
 
-func (r *SessionRepo) DeleteSession(ctx context.Context, sessionID uint) (error) {
+func (r *SessionRepo) DeleteSession(ctx context.Context, sessionID uint64) (error) {
 	err := r.DB.WithContext(ctx).Where("id = ?", sessionID).Delete(&entities.Session{}).Error
 	if err != nil {
 		return err

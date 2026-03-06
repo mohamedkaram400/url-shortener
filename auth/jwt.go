@@ -40,7 +40,7 @@ func ValidateJWT(secretKey string, tokenString string) (*entities.CustomClaims, 
 	return claims, nil
 }
 
-func IsuueTokens(secretKey string, AccessTokenTime int, RefrashTokenTime int, userID uint) (string, string, error) {
+func IsuueTokens(secretKey string, AccessTokenTime int, RefrashTokenTime int, userID uint64) (string, string, error) {
 	accessToken, err := GenerateAccessToken(secretKey, AccessTokenTime, userID)
 	if err != nil {
 		return "", "", err
@@ -53,19 +53,19 @@ func IsuueTokens(secretKey string, AccessTokenTime int, RefrashTokenTime int, us
 	return accessToken, refreshToken, nil
 }
 
-func GenerateRefrashToken(secretKey string, userID uint, RefrashTokenTime int) (string, error) {
+func GenerateRefrashToken(secretKey string, userID uint64, RefrashTokenTime int) (string, error) {
 	return GenerateToken(secretKey, time.Duration(RefrashTokenTime) * 24 * time.Hour, userID, RefreshToken)
 }
 
-func GenerateAccessToken(secretKey string, AccessTokenTime int, userID uint) (string, error) {
+func GenerateAccessToken(secretKey string, AccessTokenTime int, userID uint64) (string, error) {
 	return GenerateToken(secretKey, time.Duration(AccessTokenTime) * time.Minute, userID, AccessToken)
 }
 
-func GenerateToken(secretKey string, duration time.Duration, userID uint, tokenType TokenType) (string, error) {
+func GenerateToken(secretKey string, duration time.Duration, userID uint64, tokenType TokenType) (string, error) {
 	jwtSecret := []byte(secretKey)
 	
 	claims := entities.CustomClaims{
-		UserID:    int64(userID),
+		UserID:    userID,
 		TokenType: string(tokenType),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
