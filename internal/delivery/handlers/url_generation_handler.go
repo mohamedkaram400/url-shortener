@@ -54,5 +54,5 @@ func (h *UrlGenerationHandler) Redirect(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusFound, originalURL) // 301
+	c.Redirect(http.StatusFound, originalURL) // 302
 }

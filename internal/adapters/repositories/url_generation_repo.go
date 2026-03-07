@@ -3,8 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
-	"log"
-
+	
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
 	domainerrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
 	"gorm.io/gorm"
