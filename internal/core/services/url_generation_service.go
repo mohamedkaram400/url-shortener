@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
@@ -10,16 +11,18 @@ import (
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
 	"github.com/mohamedkaram400/url-shortener/internal/ports"
 	"github.com/mohamedkaram400/url-shortener/pkg"
+	"github.com/redis/go-redis/v9"
 )
 
 type UrlGenerationService struct {
 	Repo            ports.UrlGenerationRepository
+	Redis           *redis.Client
 	ShortCodeLenght int
 	BaseURL         string
 }
 
-func NewUrlGenerationService(repo ports.UrlGenerationRepository, shortCodeLenght int, baseUrl string) *UrlGenerationService {
-	return &UrlGenerationService{Repo: repo, ShortCodeLenght: shortCodeLenght, BaseURL: baseUrl}
+func NewUrlGenerationService(repo ports.UrlGenerationRepository, redis *redis.Client, shortCodeLenght int, baseUrl string) *UrlGenerationService {
+	return &UrlGenerationService{Repo: repo, Redis: redis, ShortCodeLenght: shortCodeLenght, BaseURL: baseUrl}
 }
 
 func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, userID uint64, req *dto.ShortenUrlRequest) (string, error) {
@@ -89,8 +92,22 @@ func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, userID uint
 	return shortUrl, nil
 }
 
-func (s *UrlGenerationService) Redirect(c context.Context, code string) (string, error) {
-	url, err := s.Repo.GetByShortCode(c, code)
+func (s *UrlGenerationService) Redirect(ctx context.Context, code string) (string, error) {
+
+	// 1. Check Redis cache
+	longURL, err := s.getURLFromRedis(ctx, code)
+	if err != nil {
+		return "", err
+	}
+
+	log.Println("long url from cache: ", longURL)
+
+	if longURL != "" {
+		return longURL, nil
+	}
+		
+	// 2. Cache miss → query DB
+	url, err := s.Repo.GetByShortCode(ctx, code)
 	if err != nil {
 		return "", err
 	}
@@ -103,9 +120,41 @@ func (s *UrlGenerationService) Redirect(c context.Context, code string) (string,
 		return "", domainerrors.ErrLinkExpired
 	}
 
-	if err := s.Repo.IncrementClickCount(c, url.ID); err != nil {
-		return "", err
-	}
+	// 3. Store in Redis (non-blocking)
+	_ = s.storeURLInRedis(ctx, code, url.OriginalURL)
+
+	// 4. Async analytics increment
+	go func() {
+		if err := s.Repo.IncrementClickCount(context.Background(), url.ID); err != nil {
+			log.Println("click count update failed:", err)
+		}
+	}()
+
+	log.Println("long url from db: ", url.OriginalURL)
 
 	return url.OriginalURL, nil
 }
+
+func (s *UrlGenerationService) storeURLInRedis(ctx context.Context, code string, longURL string) (error) {
+	ttl := 24 * time.Hour
+
+	return s.Redis.Set(ctx, code, longURL, ttl).Err()
+}
+
+func (s *UrlGenerationService) getURLFromRedis(ctx context.Context, code string) (string, error) {
+	url, err := s.Redis.Get(ctx, code).Result()
+
+	if err == redis.Nil {
+		return "", nil // cache miss
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return url, nil
+}
+
+
+
+

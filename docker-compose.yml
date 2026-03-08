@@ -77,7 +77,10 @@ services:
       - redis_data:/data
     networks:
       - url_shortener
-    # command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
 

@@ -28,38 +28,35 @@ Steps For build this project:-
 1. URL Shortening - Get unique URL
 2. URL Redirection
 3. Link Analytics
+4. Custom alias
+5. Expiration links
+6. Authenticated users
 
 - Non-Funcational Requirements:
-1. Minimize redirect latency
-2. 100M DUA -> 100,000 per day 
-3. 1B reads per day
+1. Minimize redirect latency    < 50 ms
+2. Ensure uniqueness of short code 
+3. 100M DUA -> 100,000 per day, 1B reads per day
 4. 1 - 5B total lifetime URLs 
-5. CAP Theorem -> high avilabilty
+5. CAP Theorem -> high avilabilty   99.9%
 
-- Envelope Estimation
-* scale 
-. 100M DUA -> 100,000 per day 
-* latency
-. 10^9 / 10^5 = 10K RPS
-* storage
-. 1 - 5B total lifetime URLs 
-* bandwidth
-. 
 
 2- Database Design 
 
-- User table
-* id
-* name
+users
+-----
+id
+name
 ...
 
-- Url table
-* id
-* custom_alias
-* expiration_time
-* longUrl
-* shortUrl
-* userId
+urls
+-----
+id
+short_code
+long_url
+user_id
+created_at
+expires_at
+click_count
 ...
 
 3- API Design 
@@ -78,12 +75,109 @@ res: redirect(status found) 302
 
 4- High-Level Design
 
-- client -> server -> database
+Client
+  |
+CDN
+  |
+Load Balancer
+  |
+App Servers
+  |
+Redis Cache
+  |
+Database
 
 * Take the deciation about which code will use (302 temporary, 301 redirect permanent)?
 
 
+
+
 5- Deep Dives
+1. Minimize redirect latency
+
+Read-through cache
+LRU eviction
+1 request redirect
+2 check Redis
+3 if hit → return
+4 if miss → DB
+5 store in cache
+
+2. Ensure uniqueness of short code 
+
+1- prefix the long url                              (very bad idea)
+2- random number generator 10^9 10 charactors       (good and most common idea)
+    - base62 encoding, 0-9, A-Z, a-z
+    - 62^6 = 56B
+    - Birthday Paradox
+    - 880k collisions
+    - we just need to check the collisions
+3- hash the long url                                 (good and most common idea)
+    - md5(longUrl) -> hash -> base62(hash)[:6]
+    - same as above
+4- counter                                           (not very good idea)
+    - incrementing a counter -> base62
+    - predictability which is for bad for security
+    - bijective function                                (advenced idea)
+
+
+- Envelope Estimation
+* scale 
+. 100M DUA -> 100,000 per day 
+* latency
+. 10^9 / 10^5 = 10K RPS
+* storage
+. 1 - 5B total lifetime URLs 
+
+3. 100M DUA -> 100,000 per day, 1B reads per day
+
+10^8 / 10^5 = 10^3 = 1000 rps * 10k (as a picke time) = 100k rps
+
+4. 1 - 5B total lifetime URLs 
+
+ ~500 bytes (maximum for one records) * 5B = 2.5TB
+ so we need Sharded databases
+
+5. CAP Theorem -> high avilabilty
+
+Primary DB
+   |
+Replication
+   |
+Read replicas
+
+
+
+Best Architecture for URL Shortener
+Client
+  |
+DNS
+  |
+CDN
+  |
+Load Balancer
+  |
+App Servers
+  |
+Redis Cache
+  |
+Sharded DB Cluster
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 <!-- ===================================================== -->

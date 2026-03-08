@@ -15,6 +15,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/mohamedkaram400/url-shortener/internal/core/services"
 	"github.com/mohamedkaram400/url-shortener/internal/delivery/handlers"
+	"github.com/mohamedkaram400/url-shortener/internal/delivery/middlewares"
 	"github.com/mohamedkaram400/url-shortener/internal/delivery/routes"
 )
 
@@ -48,14 +49,16 @@ func main() {
 
 	// User Auth Module
 	shortUrlRepo := repositories.NewUrlGenerationRepo(db)
-	shortUrlService := services.NewUrlGenerationService(shortUrlRepo, config.ShortCodeLenght, config.BaseURL)
+	shortUrlService := services.NewUrlGenerationService(shortUrlRepo, redisClient, config.ShortCodeLenght, config.BaseURL)
 	urlGenerationHandler := handlers.NewUrlGenerationHandler(shortUrlService)
 
+	rateLimiterService := services.NewRateLimiterService(redisClient)
 
 	// Init router
 	router := gin.Default()
 	router.SetTrustedProxies(nil)
 	router.Use(gin.Logger(), gin.Recovery())
+	router.Use(middlewares.RateLimiterMiddleware(rateLimiterService))
 	api := router.Group("/api")
 
 	// Public redirect route OUTSIDE api
