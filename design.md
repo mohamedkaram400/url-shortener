@@ -1,19 +1,4 @@
-Concpts need to know:-
-1. bandwidth
-
-| Unit          | Value         | Description             |
-| ------------- | ------------- | ----------------------- |
-| bit (b)       | smallest unit | 0 or 1                  |
-| byte (B)      | 8 bits        | basic storage unit      |
-| kilobyte (KB) | 1024 bytes    | small files             |
-| megabyte (MB) | 1024 KB       | images, small DB tables |
-| gigabyte (GB) | 1024 MB       | databases, videos       |
-| terabyte (TB) | 1024 GB       | large databases         |
-| petabyte (PB) | 1024 TB       | huge systems            |
-| exabyte (EB)  | 1024 PB       | internet-scale          |
-
-
-Steps For build this project:-
+Steps For building this project:-
 
 1- Gather Requirements
 2- Database Design 
@@ -33,11 +18,41 @@ Steps For build this project:-
 6. Authenticated users
 
 - Non-Funcational Requirements:
-1. Minimize redirect latency    < 50 ms
-2. Ensure uniqueness of short code 
-3. 100M DUA -> 100,000 per day, 1B reads per day
-4. 1 - 5B total lifetime URLs 
-5. CAP Theorem -> high avilabilty   99.9%
+1. High Availability: The system must be highly available (e.g., 99.99%).
+2. Low Latency: Minimize redirect latency    < 50 ms
+3. Uniqueness: Each long URL should map to a unique short URL.
+4. Scalability: Should handle a large number of read and write requests (100:1 read-to-write ratio).
+5. Durability: Once a short URL is created, the mapping must not be lost.
+
+- Back-of-the-Envelope Estimation
+1. 100M DUA -> 100,000 per day, 1B reads per day
+Writes (URL Shortening)
+Average write QPS = 10,000,000 / (24 * 3600) ≈ 115 QPS (steady state)
+> Peak write load (3x factor) ≈ 350 QPS
+
+Reads (Redirects)
+Average read QPS = 1,000,000,000 / (24 * 3600) ≈ 11,500 QPS (steady state)
+> Peak read load (3x factor) ≈ 35,000 QPS
+
+2. Storage 
+Each URL mapping stores:
+
+Short code: ~7 characters = 7 bytes
+Long URL: average 200 characters = 200 bytes
+User ID: UUID = 36 bytes
+Timestamps, metadata: ~50 bytes
+
+> Total per record: ~300 bytes
+
+URLs per year: 10M/day * 365 days = 3.65 billion URLs/year
+Storage per year: 3.65B * 300 bytes = ~1.1 TB/year
+
+> 5-year storage: ~5.5 TB
+
+3. short code length
+Using Base62 encoding (a-z, A-Z, 0-9):
+* characters: 62^6 = 56.8 billion unique codes
+* characters: 62^7 = 3.5 trillion unique codes
 
 
 2- Database Design 
@@ -69,11 +84,43 @@ req: {
 }
 res: shortUrl
 
+Error Cases:
+> 409 Conflict: If a custom alias already exists.
+> 400 Bad Request: If the URL is invalid.
+> 401 Unauthorized: If the user is not authenticated.
+
 GET /api/urls/{shortUrl}
 res: redirect(status found) 302
 
+Behavior:
+> If the short URL exists and is active, return an HTTP redirect.
+> If the link has expired, return 410 Gone.
+> If the link does not exist, return 404 Not Found.
 
 4- High-Level Design
+
+1. Requirement 1: URL Shortening When a user submits a long URL, we need to generate a unique short code, store the mapping, and return the short URL.
+
+1. Client:
+Clients are end-users or applications interacting with the system via web browsers, mobile apps, or third-party integrations (e.g., APIs).
+
+POST /shorten to generate short URLs.
+GET /{short_code} to resolve and access the original URLs.
+
+2. Load Balancer
+The Load Balancer sits in front of all application servers and plays a key role in ensuring high availability and scalability.
+
+* Responsibilities:
+Distributes incoming traffic across multiple application servers.
+Ensures high availability and fault tolerance by rerouting traffic if one server fails.
+Can also perform SSL termination and basic request filtering (e.g., rate limiting).
+
+3. URL Generation Service
+
+4. Redirection Service
+
+5. Database 
+
 
 Client
   |
@@ -88,8 +135,6 @@ Redis Cache
 Database
 
 * Take the deciation about which code will use (302 temporary, 301 redirect permanent)?
-
-
 
 
 5- Deep Dives

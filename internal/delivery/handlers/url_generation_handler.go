@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -48,11 +49,23 @@ func (h *UrlGenerationHandler) GenerateShortUrl(c *gin.Context) {
 func (h *UrlGenerationHandler) Redirect(c *gin.Context) {
 	code := c.Param("code")
 
-	originalURL, err := h.UrlGenerationService.Redirect(c, code)
+	originalURL, err := h.UrlGenerationService.Redirect(c.Request.Context(), code)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
 	c.Redirect(http.StatusFound, originalURL) // 302
+}
+
+func (h *UrlGenerationHandler) GenerateLinkAnalytics(c *gin.Context) {
+	code := c.Param("short_code")
+
+	analyticsData, err := h.UrlGenerationService.GenerateLinkAnalytics(c.Request.Context(), code)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, responses.SuccessResponse("URL Analytics Generated successfully", analyticsData))
 }

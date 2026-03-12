@@ -12,5 +12,6 @@ func RegisterUrlGenerationRoutes(rg *gin.RouterGroup, urlGenerationHandler *hand
 
 	{
 		protected.POST("/shorten", urlGenerationHandler.GenerateShortUrl)
+		protected.POST("/analytics/:short_code", urlGenerationHandler.GenerateLinkAnalytics)
 	}
 }

@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mohamedkaram400/url-shortener/internal/core/entities"
 	domainerrors "github.com/mohamedkaram400/url-shortener/internal/core/errors"
 	"github.com/mohamedkaram400/url-shortener/internal/dto"
 	"github.com/mohamedkaram400/url-shortener/internal/ports"
+	"github.com/mohamedkaram400/url-shortener/internal/responses"
 	"github.com/mohamedkaram400/url-shortener/pkg"
 	"github.com/redis/go-redis/v9"
 )
@@ -93,56 +96,69 @@ func (s *UrlGenerationService) GenerateShortUrl(ctx context.Context, userID uint
 }
 
 func (s *UrlGenerationService) Redirect(ctx context.Context, code string) (string, error) {
+    var finalURL string
+    var urlID uint64
 
 	// 1. Check Redis cache
-	longURL, err := s.getURLFromRedis(ctx, code)
+	url, err := s.getURLFromRedis(ctx, code)
 	if err != nil {
 		return "", err
 	}
 
-	log.Println("long url from cache: ", longURL)
+	if err == nil && url != "" {
+        parts := strings.SplitN(url, "|", 2)
 
-	if longURL != "" {
-		return longURL, nil
+		id, _ := strconv.ParseUint(parts[0], 10, 64)
+
+		finalURL = parts[1]
+		urlID = id
+
+		log.Println("long url, id from cache: ", finalURL, urlID)
+
+    } else {
+
+		// 2. Cache miss → query DB
+		url, err := s.Repo.GetByShortCode(ctx, code)
+		if err != nil {
+			return "", err
+		}
+
+		if url.Status != "Active" {
+			return "", domainerrors.ErrURLInactive
+		}
+
+		if url.ExpiresAt != nil && time.Now().After(*url.ExpiresAt) {
+			return "", domainerrors.ErrLinkExpired
+		}
+
+		finalURL = url.OriginalURL
+		urlID = url.ID
+
+		log.Println("long url from db: ", finalURL)
+
+		// 3. Store in Redis (non-blocking)
+		_ = s.storeURLInRedis(ctx, code, finalURL, urlID)
 	}
-		
-	// 2. Cache miss → query DB
-	url, err := s.Repo.GetByShortCode(ctx, code)
-	if err != nil {
-		return "", err
-	}
-
-	if url.Status != "Active" {
-		return "", domainerrors.ErrURLInactive
-	}
-
-	if url.ExpiresAt != nil && time.Now().After(*url.ExpiresAt) {
-		return "", domainerrors.ErrLinkExpired
-	}
-
-	// 3. Store in Redis (non-blocking)
-	_ = s.storeURLInRedis(ctx, code, url.OriginalURL)
-
+	
 	// 4. Async analytics increment
 	go func() {
-		if err := s.Repo.IncrementClickCount(context.Background(), url.ID); err != nil {
-			log.Println("click count update failed:", err)
-		}
+		if urlID != 0 {
+			if err := s.Repo.IncrementClickCount(context.Background(), urlID); err != nil {
+				log.Println("click count update failed:", err)
+			}
+		}	
 	}()
 
-	log.Println("long url from db: ", url.OriginalURL)
-
-	return url.OriginalURL, nil
+	return finalURL, nil
 }
 
-func (s *UrlGenerationService) storeURLInRedis(ctx context.Context, code string, longURL string) (error) {
-	ttl := 24 * time.Hour
-
-	return s.Redis.Set(ctx, code, longURL, ttl).Err()
+func (s *UrlGenerationService) storeURLInRedis(ctx context.Context, code string, longURL string, urlID uint64) error {
+    value := fmt.Sprintf("%d|%s", urlID, longURL)
+    return s.Redis.Set(ctx, "url:"+code, value, 24*time.Hour).Err()
 }
 
 func (s *UrlGenerationService) getURLFromRedis(ctx context.Context, code string) (string, error) {
-	url, err := s.Redis.Get(ctx, code).Result()
+	url, err := s.Redis.Get(ctx, "url:"+code).Result()
 
 	if err == redis.Nil {
 		return "", nil // cache miss
@@ -155,6 +171,25 @@ func (s *UrlGenerationService) getURLFromRedis(ctx context.Context, code string)
 	return url, nil
 }
 
+func (s *UrlGenerationService) GenerateLinkAnalytics(ctx context.Context, code string) (*responses.LinkAnalyticsResponse, error) {
+	var expires string
 
+	url, err := s.Repo.GetByShortCode(ctx, code)
+	if err != nil {
+		return  nil, err
+	}
+	
+	if url.ExpiresAt != nil {
+		expires = url.ExpiresAt.Format("Monday, 02 January 2006 at 15:04")
+	}
 
-
+	return &responses.LinkAnalyticsResponse{
+		LongURL:     url.OriginalURL,
+		ShortURL:    url.ShortCode,
+		TotalClicks: url.ClickCount,
+		CustomAlias: url.CustomAlias,
+		Status:      url.Status,
+		CreatedAt:   expires,
+		ExpiresAt:   url.ExpiresAt.Format("Monday, 02 January 2006 at 15:04"),
+	}, nil
+}
